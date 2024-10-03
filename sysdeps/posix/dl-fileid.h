@@ -20,17 +20,20 @@
 #include <sys/stat.h>
 
 /* For POSIX.1 systems, the pair of st_dev and st_ino constitute
-   a unique identifier for a file.  */
+   a unique identifier for a file.  We also support loading objects from
+   an offset into a file, so we need the offsets to distinguish objects
+   in the same file on disk.  */
 struct r_file_id
   {
     dev_t dev;
     ino64_t ino;
+    off_t off;
   };
 
 /* Sample FD to fill in *ID.  Returns true on success.
    On error, returns false, with errno set.  */
 static inline bool
-_dl_get_file_id (int fd, struct r_file_id *id)
+_dl_get_file_id (int fd, off_t off, struct r_file_id *id)
 {
   struct __stat64_t64 st;
 
@@ -39,6 +42,7 @@ _dl_get_file_id (int fd, struct r_file_id *id)
 
   id->dev = st.st_dev;
   id->ino = st.st_ino;
+  id->off = off;
   return true;
 }
 
@@ -46,5 +50,5 @@ _dl_get_file_id (int fd, struct r_file_id *id)
 static inline bool
 _dl_file_id_match_p (const struct r_file_id *a, const struct r_file_id *b)
 {
-  return a->dev == b->dev && a->ino == b->ino;
+  return a->dev == b->dev && a->ino == b->ino && a->off == b->off;
 }

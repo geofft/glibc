@@ -44,7 +44,7 @@ _dl_process_pt_note (struct link_map *l, int fd, const ElfW(Phdr) *ph)
 /* Called for each property in the NT_GNU_PROPERTY_TYPE_0 note of L,
    processing of the properties continues until this returns 0.  */
 static inline int __attribute__ ((always_inline))
-_dl_process_gnu_property (struct link_map *l, int fd, uint32_t type,
+_dl_process_gnu_property (struct link_map *l, int fd, off_t off, uint32_t type,
 			  uint32_t datasz, void *data)
 {
   /* Continue until GNU_PROPERTY_1_NEEDED is found.  */

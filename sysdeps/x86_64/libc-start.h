@@ -44,7 +44,7 @@ get_cet_feature (void)
   for (ph = phdr + GL(dl_phnum); ph != phdr; ph--)
     if (ph[-1].p_type == PT_GNU_PROPERTY)
       {
-	_dl_process_pt_gnu_property (main_map, -1, &ph[-1]);
+	_dl_process_pt_gnu_property (main_map, -1, 0, &ph[-1]);
 	/* Enable IBT and SHSTK only if they are enabled on static
 	   executable.  */
 	cet_feature &= (main_map->l_x86_feature_1_and

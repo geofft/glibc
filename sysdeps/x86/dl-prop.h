@@ -237,7 +237,7 @@ _dl_process_pt_note (struct link_map *l, int fd, const ElfW(Phdr) *ph)
 }
 
 static inline int __attribute__ ((always_inline))
-_dl_process_gnu_property (struct link_map *l, int fd, uint32_t type,
+_dl_process_gnu_property (struct link_map *l, int fd, off_t off, uint32_t type,
 			  uint32_t datasz, void *data)
 {
   /* This is called on each GNU property.  */

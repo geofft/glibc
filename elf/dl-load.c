@@ -853,7 +853,7 @@ _dl_init_paths (const char *llp, const char *source,
    the fd used for loading module L.  */
 
 void
-_dl_process_pt_gnu_property (struct link_map *l, int fd, const ElfW(Phdr) *ph)
+_dl_process_pt_gnu_property (struct link_map *l, int fd, off_t off, const ElfW(Phdr) *ph)
 {
   const ElfW(Nhdr) *note = (const void *) (ph->p_vaddr + l->l_addr);
   const ElfW(Addr) size = ph->p_memsz;
@@ -900,7 +900,7 @@ _dl_process_pt_gnu_property (struct link_map *l, int fd, const ElfW(Phdr) *ph)
 	      last_type = type;
 
 	      /* Target specific property processing.  */
-	      if (_dl_process_gnu_property (l, fd, type, datasz, ptr) == 0)
+	      if (_dl_process_gnu_property (l, fd, off, type, datasz, ptr) == 0)
 		return;
 
 	      /* Check the next property item.  */
@@ -927,6 +927,7 @@ static
 #endif
 struct link_map *
 _dl_map_object_from_fd (const char *name, const char *origname, int fd,
+			off_t off,
 			struct filebuf *fbp, char *realname,
 			struct link_map *loader, int l_type, int mode,
 			void **stack_endp, Lmid_t nsid)
@@ -952,7 +953,7 @@ _dl_map_object_from_fd (const char *name, const char *origname, int fd,
     }
   else
     {
-      if (__glibc_unlikely (!_dl_get_file_id (fd, &id)))
+      if (__glibc_unlikely (!_dl_get_file_id (fd, off, &id)))
 	{
 	  errstring = N_("cannot stat shared object");
 	lose_errno:
@@ -1062,7 +1063,7 @@ _dl_map_object_from_fd (const char *name, const char *origname, int fd,
     {
       phdr = alloca (maplength);
       if ((size_t) __pread64_nocancel (fd, (void *) phdr, maplength,
-				       header->e_phoff) != maplength)
+				       off + header->e_phoff) != maplength)
 	{
 	  errstring = N_("cannot read file data");
 	  goto lose_errno;
@@ -1129,7 +1130,8 @@ _dl_map_object_from_fd (const char *name, const char *origname, int fd,
 	  /* Remember the maximum p_align.  */
 	  if (powerof2 (ph->p_align) && ph->p_align > p_align_max)
 	    p_align_max = ph->p_align;
-	  c->mapoff = ALIGN_DOWN (ph->p_offset, GLRO(dl_pagesize));
+	  /* We already checked that off was page-aligned in _dl_map_object. */
+	  c->mapoff = ALIGN_DOWN (ph->p_offset, GLRO(dl_pagesize)) + off;
 
 	  DIAG_PUSH_NEEDS_COMMENT;
 
@@ -1327,7 +1329,7 @@ cannot enable executable stack as shared object requires");
 	_dl_process_pt_note (l, fd, &ph[-1]);
 	break;
       case PT_GNU_PROPERTY:
-	_dl_process_pt_gnu_property (l, fd, &ph[-1]);
+	_dl_process_pt_gnu_property (l, fd, off, &ph[-1]);
 	break;
       }
 
@@ -1524,7 +1526,7 @@ print_search_path (struct r_search_path_elem **list,
    If FD is not -1, then the file is already open and FD refers to it.
    In that case, FD is consumed for both successful and error returns.  */
 static int
-open_verify (const char *name, int fd,
+open_verify (const char *name, int fd, off_t off,
              struct filebuf *fbp, struct link_map *loader,
 	     int whatcode, int mode, bool *found_other_class, bool free_name)
 {
@@ -1588,6 +1590,7 @@ open_verify (const char *name, int fd,
       __set_errno (0);
       fbp->len = 0;
       assert (sizeof (fbp->buf) > sizeof (ElfW(Ehdr)));
+      lseek(fd, off, SEEK_SET);
       /* Read in the header.  */
       do
 	{
@@ -1741,7 +1744,7 @@ open_verify (const char *name, int fd,
    true.  */
 
 static int
-open_path (const char *name, size_t namelen, int mode,
+open_path (const char *name, size_t namelen, off_t off, int mode,
 	   struct r_search_path_struct *sps, char **realname,
 	   struct filebuf *fbp, struct link_map *loader, int whatcode,
 	   bool *found_other_class)
@@ -1796,7 +1799,7 @@ open_path (const char *name, size_t namelen, int mode,
 	  if (__glibc_unlikely (GLRO(dl_debug_mask) & DL_DEBUG_LIBS))
 	    _dl_debug_printf ("  trying file=%s\n", buf);
 
-	  fd = open_verify (buf, -1, fbp, loader, whatcode, mode,
+	  fd = open_verify (buf, -1, off, fbp, loader, whatcode, mode,
 			    found_other_class, false);
 	  if (this_dir->status[cnt] == unknown)
 	    {
@@ -1898,7 +1901,7 @@ open_path (const char *name, size_t namelen, int mode,
 /* Map in the shared object file NAME.  */
 
 struct link_map *
-_dl_map_object (struct link_map *loader, const char *name,
+_dl_map_object (struct link_map *loader, const char *name, off_t off,
 		int type, int trace_mode, int mode, Lmid_t nsid)
 {
   int fd;
@@ -1910,6 +1913,13 @@ _dl_map_object (struct link_map *loader, const char *name,
 
   assert (nsid >= 0);
   assert (nsid < GL(dl_nns));
+
+  if (__glibc_likely (off == -1))
+    {
+      off = 0; /* TODO */
+    }
+  else if (__glibc_unlikely ((off & (GLRO(dl_pagesize) - 1)) != 0))
+    _dl_signal_error(ERANGE, name, NULL, N_("Specified offset not page-aligned"));
 
   /* Look for this name among those already loaded.  */
   for (l = GL(dl_ns)[nsid]._ns_loaded; l; l = l->l_next)
@@ -1994,7 +2004,7 @@ _dl_map_object (struct link_map *loader, const char *name,
 	  for (l = loader; l; l = l->l_loader)
 	    if (cache_rpath (l, &l->l_rpath_dirs, DT_RPATH, "RPATH"))
 	      {
-		fd = open_path (name, namelen, mode,
+		fd = open_path (name, namelen, off, mode,
 				&l->l_rpath_dirs,
 				&realname, &fb, loader, LA_SER_RUNPATH,
 				&found_other_class);
@@ -2010,7 +2020,7 @@ _dl_map_object (struct link_map *loader, const char *name,
 	      && main_map != NULL && main_map->l_type != lt_loaded
 	      && cache_rpath (main_map, &main_map->l_rpath_dirs, DT_RPATH,
 			      "RPATH"))
-	    fd = open_path (name, namelen, mode,
+	    fd = open_path (name, namelen, off, mode,
 			    &main_map->l_rpath_dirs,
 			    &realname, &fb, loader ?: main_map, LA_SER_RUNPATH,
 			    &found_other_class);
@@ -2025,7 +2035,7 @@ _dl_map_object (struct link_map *loader, const char *name,
 	      l_rpath_dirs.dirs = NULL;
 	      if (cache_rpath (main_map, &l_rpath_dirs,
 			       DT_RUNPATH, "RUNPATH"))
-		fd = open_path (name, namelen, mode, &l_rpath_dirs,
+		fd = open_path (name, namelen, off, mode, &l_rpath_dirs,
 				&realname, &fb, loader ?: main_map,
 				LA_SER_RUNPATH, &found_other_class);
 	    }
@@ -2033,7 +2043,7 @@ _dl_map_object (struct link_map *loader, const char *name,
 
       /* Try the LD_LIBRARY_PATH environment variable.  */
       if (fd == -1 && __rtld_env_path_list.dirs != (void *) -1)
-	fd = open_path (name, namelen, mode, &__rtld_env_path_list,
+	fd = open_path (name, namelen, off, mode, &__rtld_env_path_list,
 			&realname, &fb,
 			loader ?: GL(dl_ns)[LM_ID_BASE]._ns_loaded,
 			LA_SER_LIBPATH, &found_other_class);
@@ -2042,7 +2052,7 @@ _dl_map_object (struct link_map *loader, const char *name,
       if (fd == -1 && loader != NULL
 	  && cache_rpath (loader, &loader->l_runpath_dirs,
 			  DT_RUNPATH, "RUNPATH"))
-	fd = open_path (name, namelen, mode,
+	fd = open_path (name, namelen, off, mode,
 			&loader->l_runpath_dirs, &realname, &fb, loader,
 			LA_SER_RUNPATH, &found_other_class);
 
@@ -2091,7 +2101,7 @@ _dl_map_object (struct link_map *loader, const char *name,
 
 	      if (cached != NULL)
 		{
-		  fd = open_verify (cached, -1,
+		  fd = open_verify (cached, -1, off,
 				    &fb, loader ?: GL(dl_ns)[nsid]._ns_loaded,
 				    LA_SER_CONFIG, mode, &found_other_class,
 				    false);
@@ -2109,7 +2119,7 @@ _dl_map_object (struct link_map *loader, const char *name,
 	  && ((l = loader ?: GL(dl_ns)[nsid]._ns_loaded) == NULL
 	      || __glibc_likely (!(l->l_flags_1 & DF_1_NODEFLIB)))
 	  && __rtld_search_dirs.dirs != (void *) -1)
-	fd = open_path (name, namelen, mode, &__rtld_search_dirs,
+	fd = open_path (name, namelen, off, mode, &__rtld_search_dirs,
 			&realname, &fb, l, LA_SER_DEFAULT, &found_other_class);
 
       /* Add another newline when we are tracing the library loading.  */
@@ -2126,7 +2136,7 @@ _dl_map_object (struct link_map *loader, const char *name,
 	fd = -1;
       else
 	{
-	  fd = open_verify (realname, -1, &fb,
+	  fd = open_verify (realname, -1, off, &fb,
 			    loader ?: GL(dl_ns)[nsid]._ns_loaded, 0, mode,
 			    &found_other_class, true);
 	  if (__glibc_unlikely (fd == -1))
@@ -2187,7 +2197,7 @@ _dl_map_object (struct link_map *loader, const char *name,
     }
 
   void *stack_end = __libc_stack_end;
-  return _dl_map_object_from_fd (name, origname, fd, &fb, realname, loader,
+  return _dl_map_object_from_fd (name, origname, fd, off, &fb, realname, loader,
 				 type, mode, &stack_end, nsid);
 }
 

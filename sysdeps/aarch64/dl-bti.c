@@ -29,7 +29,7 @@
 /* Enable BTI protection for MAP.  */
 
 void
-_dl_bti_protect (struct link_map *map, int fd)
+_dl_bti_protect (struct link_map *map, int fd, off_t off)
 {
   const size_t pagesz = GLRO(dl_pagesize);
   const ElfW(Phdr) *phdr;
@@ -39,7 +39,7 @@ _dl_bti_protect (struct link_map *map, int fd)
       {
 	size_t vstart = ALIGN_DOWN (phdr->p_vaddr, pagesz);
 	size_t vend = ALIGN_UP (phdr->p_vaddr + phdr->p_filesz, pagesz);
-	off_t off = ALIGN_DOWN (phdr->p_offset, pagesz);
+	off_t poff = ALIGN_DOWN (phdr->p_offset, pagesz);
 	void *start = (void *) (vstart + map->l_addr);
 	size_t len = vend - vstart;
 
@@ -55,7 +55,7 @@ _dl_bti_protect (struct link_map *map, int fd)
 	else
 	  map->l_mach.bti_fail = __mmap (start, len, prot,
 					 MAP_FIXED|MAP_COPY|MAP_FILE,
-					 fd, off) == MAP_FAILED;
+					 fd, off + poff) == MAP_FAILED;
       }
 }
 

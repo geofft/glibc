@@ -917,7 +917,7 @@ rtld_hidden_proto (_dl_catch_exception)
    LOADER's DT_RPATH is used in searching for NAME.
    If the object is already opened, returns its existing map.  */
 extern struct link_map *_dl_map_object (struct link_map *loader,
-					const char *name,
+					const char *name, off_t off,
 					int type, int trace_mode, int mode,
 					Lmid_t nsid) attribute_hidden;
 
@@ -945,7 +945,7 @@ extern void _dl_rtld_di_serinfo (struct link_map *loader,
 
 /* Process PT_GNU_PROPERTY program header PH in module L after
    PT_LOAD segments are mapped from file FD.  */
-void _dl_process_pt_gnu_property (struct link_map *l, int fd,
+void _dl_process_pt_gnu_property (struct link_map *l, int fd, off_t off,
 				  const ElfW(Phdr) *ph);
 
 

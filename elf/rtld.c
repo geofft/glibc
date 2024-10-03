@@ -602,6 +602,7 @@ struct map_args
 {
   /* Argument to map_doit.  */
   const char *str;
+  off_t off;
   struct link_map *loader;
   int mode;
   /* Return value of map_doit.  */
@@ -641,7 +642,7 @@ map_doit (void *a)
 {
   struct map_args *args = (struct map_args *) a;
   int type = (args->mode == __RTLD_OPENEXEC) ? lt_executable : lt_library;
-  args->map = _dl_map_object (args->loader, args->str, type, 0,
+  args->map = _dl_map_object (args->loader, args->str, args->off, type, 0,
 			      args->mode, LM_ID_BASE);
 }
 
@@ -810,6 +811,7 @@ do_preload (const char *fname, struct link_map *main_map, const char *where)
   bool malloced;
 
   args.str = fname;
+  args.off = -1; /* TODO */
   args.loader = main_map;
   args.mode = __RTLD_SECURE;
 
@@ -1259,7 +1261,7 @@ rtld_setup_main_map (struct link_map *main_map)
 	_dl_process_pt_note (main_map, -1, &ph[-1]);
 	break;
       case PT_GNU_PROPERTY:
-	_dl_process_pt_gnu_property (main_map, -1, &ph[-1]);
+	_dl_process_pt_gnu_property (main_map, -1, 0, &ph[-1]);
 	break;
       }
 
@@ -1562,6 +1564,7 @@ dl_main (const ElfW(Phdr) *phdr,
 	  bool malloced;
 
 	  args.str = rtld_progname;
+	  args.off = -1 /* TODO */;
 	  args.loader = NULL;
 	  args.mode = __RTLD_OPENEXEC;
 	  (void) _dl_catch_error (&objname, &err_str, &malloced, map_doit,
@@ -1582,7 +1585,7 @@ dl_main (const ElfW(Phdr) *phdr,
 	{
 	  RTLD_TIMING_VAR (start);
 	  rtld_timer_start (&start);
-	  _dl_map_object (NULL, rtld_progname, lt_executable, 0,
+	  _dl_map_object (NULL, rtld_progname, -1 /* TODO */, lt_executable, 0,
 			  __RTLD_OPENEXEC, LM_ID_BASE);
 	  rtld_timer_stop (&load_time, start);
 	}
