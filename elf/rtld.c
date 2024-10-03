@@ -1402,6 +1402,19 @@ dl_main (const ElfW(Phdr) *phdr,
       /* Note the place where the dynamic linker actually came from.  */
       GL(dl_rtld_map).l_name = rtld_progname;
 
+      /* If we have a DT_GNU_OFFSET entry, then this interpreter is
+       * prepended to a real program binary, and all arguments should be
+       * processed by the real program. */
+
+      ElfW(Dyn) *dt_gnu_offset = GL(dl_rtld_map).l_info[VALIDX(DT_GNU_OFFSET)];
+      if (dt_gnu_offset != NULL)
+	{
+	  //_dl_error_printf("dt_gnu_offset = %08lx\n", (uintptr_t)dt_gnu_offset);
+	  off = dt_gnu_offset->d_un.d_val;
+	  //_dl_error_printf("off = %lx\n", off);
+	  goto after_processing_args;
+	}
+
       while (_dl_argc > 1)
 	if (! strcmp (_dl_argv[1], "--list"))
 	  {
@@ -1549,6 +1562,8 @@ dl_main (const ElfW(Phdr) *phdr,
 
       --_dl_argc;
       ++_dl_argv;
+
+    after_processing_args:
 
       /* The initialization of _dl_stack_flags done below assumes the
 	 executable's PT_GNU_STACK may have been honored by the kernel, and

@@ -931,6 +931,7 @@ typedef struct
    Dyn.d_un.d_val field of the Elf*_Dyn structure.  This follows Sun's
    approach.  */
 #define DT_VALRNGLO	0x6ffffd00
+#define DT_GNU_OFFSET	0x6ffffdf4	/* Offset of real program after dynamic linker */
 #define DT_GNU_PRELINKED 0x6ffffdf5	/* Prelinking timestamp */
 #define DT_GNU_CONFLICTSZ 0x6ffffdf6	/* Size of conflict section */
 #define DT_GNU_LIBLISTSZ 0x6ffffdf7	/* Size of library list */
@@ -945,7 +946,7 @@ typedef struct
 #define DT_SYMINENT	0x6ffffdff	/* Entry size of syminfo */
 #define DT_VALRNGHI	0x6ffffdff
 #define DT_VALTAGIDX(tag)	(DT_VALRNGHI - (tag))	/* Reverse order! */
-#define DT_VALNUM 12
+#define DT_VALNUM 13
 
 /* DT_* entries which fall between DT_ADDRRNGHI & DT_ADDRRNGLO use the
    Dyn.d_un.d_ptr field of the Elf*_Dyn structure.
