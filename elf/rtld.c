@@ -1397,6 +1397,7 @@ dl_main (const ElfW(Phdr) *phdr,
 
       char *argv0 = NULL;
       char **orig_argv = _dl_argv;
+      off_t off = -1;
 
       /* Note the place where the dynamic linker actually came from.  */
       GL(dl_rtld_map).l_name = rtld_progname;
@@ -1501,6 +1502,19 @@ dl_main (const ElfW(Phdr) *phdr,
 	  }
 	else if (strcmp (_dl_argv[1], "--version") == 0)
 	  _dl_version ();
+        else if (strcmp (_dl_argv[1], "--offset") == 0 && _dl_argc > 2)
+	  {
+	    char *endptr;
+	    off = _dl_strtoul(_dl_argv[2], &endptr);
+	    if (*endptr || _dl_argv[2] == endptr)
+	      {
+		_dl_error_printf ("%s: invalid offset '%s'\n", ld_so_name, _dl_argv[2]);
+		_dl_error_printf ("Try '%s --help' for more information.\n", argv0);
+		_exit (EXIT_FAILURE);
+	      }
+	    _dl_argc -= 2;
+	    _dl_argv += 2;
+	  }
 	else if (_dl_argv[1][0] == '-' && _dl_argv[1][1] == '-')
 	  {
 	   if (_dl_argv[1][1] == '\0')
@@ -1564,7 +1578,7 @@ dl_main (const ElfW(Phdr) *phdr,
 	  bool malloced;
 
 	  args.str = rtld_progname;
-	  args.off = -1 /* TODO */;
+	  args.off = off;
 	  args.loader = NULL;
 	  args.mode = __RTLD_OPENEXEC;
 	  (void) _dl_catch_error (&objname, &err_str, &malloced, map_doit,
@@ -1585,7 +1599,7 @@ dl_main (const ElfW(Phdr) *phdr,
 	{
 	  RTLD_TIMING_VAR (start);
 	  rtld_timer_start (&start);
-	  _dl_map_object (NULL, rtld_progname, -1 /* TODO */, lt_executable, 0,
+	  _dl_map_object (NULL, rtld_progname, off, lt_executable, 0,
 			  __RTLD_OPENEXEC, LM_ID_BASE);
 	  rtld_timer_stop (&load_time, start);
 	}
