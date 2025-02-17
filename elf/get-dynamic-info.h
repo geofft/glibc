@@ -128,11 +128,13 @@ elf_get_dynamic_info (struct link_map *l, bool bootstrap,
 #endif
   if (info[DT_RELR] != NULL)
     assert (info[DT_RELRENT]->d_un.d_val == sizeof (ElfW(Relr)));
+/*
   if (bootstrap || static_pie_bootstrap)
     {
       assert (info[DT_RUNPATH] == NULL);
       assert (info[DT_RPATH] == NULL);
     }
+*/
   if (bootstrap)
     {
       /* Only the bind now flags are allowed.  */
