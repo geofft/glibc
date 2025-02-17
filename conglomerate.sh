@@ -8,7 +8,7 @@ type readelf &>/dev/null || PATH="$PATH:$(nix-build --no-out-link -E '(import <n
 
 set -eu
 
-declare -i DT_GNU_OFFSET=0x6ffffdf4
+declare -i DT_GNU_OFFSET=0x6ffffdf3
 
 # We assume a 64-bit, little-endian, 4kB-page platform.
 
