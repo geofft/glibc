@@ -72,3 +72,30 @@ _dl_get_origin (void)
 
   return result;
 }
+
+/* On Linux, readlink on the magic symlinks in /proc/self/fd also has
+   the same behavior of returning the canonical path from the dcache.
+   If it does not work, we do not bother to canonicalize. */
+
+void
+_dl_canonicalize (char **filename, int fd)
+{
+  char *canonical = (char *) malloc (PATH_MAX + 1);
+  char buf[25];
+  buf[24] = '\0';
+  char *path = _itoa (fd, buf + 24, 10, 0);
+  path = memcpy (path - 14, "/proc/self/fd/", 14);
+
+  int size = INTERNAL_SYSCALL_CALL (readlinkat, AT_FDCWD, path,
+				    canonical, PATH_MAX );
+  if (size >= 0)
+    {
+      free (*filename);
+      canonical[size] = '\0';
+      *filename = canonical;
+    }
+  else
+    {
+      free (canonical);
+    }
+}

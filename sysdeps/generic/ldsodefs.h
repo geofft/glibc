@@ -1198,6 +1198,11 @@ extern struct link_map * _dl_get_dl_main_map (void) attribute_hidden;
 /* Find origin of the executable.  */
 extern const char *_dl_get_origin (void) attribute_hidden;
 
+/* Canonicalize the path to an open file.  FILENAME is a pointer to a
+   string allocated with malloc; it may be freed and replaced with
+   another string allocated with malloc. */
+extern void _dl_canonicalize (char **filename, int fd) attribute_hidden;
+
 /* Count DSTs.  */
 extern size_t _dl_dst_count (const char *name) attribute_hidden;
 

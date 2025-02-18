@@ -965,6 +965,7 @@ _dl_map_object_from_fd (const char *name, const char *origname, int fd,
     {
       assert (nsid == LM_ID_BASE);
       memset (&id, 0, sizeof (id));
+      _dl_canonicalize (&realname, fd);
     }
   else
     {

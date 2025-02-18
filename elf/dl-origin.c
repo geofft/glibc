@@ -47,3 +47,8 @@ _dl_get_origin (void)
 
   return result;
 }
+
+void
+_dl_canonicalize (char **filename, int fd)
+{
+}
