@@ -45,8 +45,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* glibc-specific global that controls SVID/POSIX/IEEE error mode. */
-extern _LIB_VERSION_TYPE _LIB_VERSION;
+/*
+ * _LIB_VERSION_TYPE and _LIB_VERSION are no longer exposed in public glibc
+ * headers (removed from <math.h> when SVID compat was fully deprecated).
+ * Definitions copied from glibc math/math-svid-compat.h.
+ * The symbol itself is still present in libm as a GLIBC_2.0 versioned global.
+ */
+typedef enum {
+    _IEEE_ = -1,
+    _SVID_,
+    _XOPEN_,
+    _POSIX_,
+    _ISOC_,
+} _LIB_VERSION_TYPE;
+
+/* Loaded at runtime via dlvsym — it lives in libm@GLIBC_2.0. */
+static _LIB_VERSION_TYPE *lib_version_ptr = NULL;
 
 static int failures  = 0;
 static int tests_run = 0;
@@ -269,13 +283,49 @@ int main(int argc, char *argv[])
     const char *type    = argv[4];
     verbose = (argc > 5 && strcmp(argv[5], "verbose") == 0);
 
-    /* Force POSIX error-handling mode (the glibc default for modern
-       programs, but set it explicitly so this test is well-defined). */
-    _LIB_VERSION = _POSIX_;
-
     void *handle = dlopen("libm.so.6", RTLD_NOW | RTLD_GLOBAL);
     if (!handle) {
         fprintf(stderr, "dlopen: %s\n", dlerror());
+        return 1;
+    }
+
+    /*
+     * _LIB_VERSION is a non-default (@) versioned symbol in libm, so plain
+     * dlsym won't find it.  The version string is the arch's initial glibc
+     * ABI version (differs per arch), so try common ones in order.
+     *
+     * We assert it's already _POSIX_ rather than forcing it, because any
+     * program that hasn't explicitly changed it runs in POSIX mode by default.
+     * If it isn't _POSIX_, our assumption that old == new is wrong and the
+     * test should not proceed.
+     */
+    {
+        static const char *vers[] = {
+            "GLIBC_2.2.5",  /* x86_64 */
+            "GLIBC_2.0",    /* i386, most 32-bit */
+            "GLIBC_2.17",   /* aarch64 */
+            "GLIBC_2.4",    /* arm (32-bit) */
+            "GLIBC_2.6",    /* mips */
+            NULL
+        };
+        for (int i = 0; vers[i]; i++) {
+            lib_version_ptr = (_LIB_VERSION_TYPE *)
+                dlvsym(handle, "_LIB_VERSION", vers[i]);
+            if (lib_version_ptr) break;
+        }
+    }
+    if (!lib_version_ptr) {
+        fprintf(stderr, "ERROR: cannot find _LIB_VERSION in libm "
+                "(tried all known arch version strings)\n");
+        dlclose(handle);
+        return 1;
+    }
+    if (*lib_version_ptr != _POSIX_) {
+        fprintf(stderr, "ERROR: _LIB_VERSION is %d, expected _POSIX_ (%d).\n"
+                "       The test assumes default POSIX mode; something has\n"
+                "       changed it before this process started.\n",
+                (int)*lib_version_ptr, (int)_POSIX_);
+        dlclose(handle);
         return 1;
     }
 
