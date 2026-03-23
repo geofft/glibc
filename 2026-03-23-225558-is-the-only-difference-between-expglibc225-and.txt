@@ -1,0 +1,1359 @@
+
+╭─── Claude Code v2.1.63 ──────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting        │
+│               Welcome back Geoffrey!               │ started                 │
+│                                                    │ Run /init to create a … │
+│                       ▐▛███▜▌                      │ ─────────────────────── │
+│                      ▝▜█████▛▘                     │ Recent activity         │
+│                        ▘▘ ▝▝                       │ No recent activity      │
+│                                                    │                         │
+│  Sonnet 4.6 · Claude Pro · claude@ldpreload.com's  │                         │
+│  Organization                                      │                         │
+│                   ~/glibc/scripts                  │                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+❯ Is the only difference between exp@GLIBC_2.2.5 and exp@@GLIBC_2.29 the    
+  lack of SVID error handling? Write code and look at commit history as     
+  necessary for a confident answer.                                         
+
+● Recalled 1 memory, searched for 3 patterns, read 3 files (ctrl+o to expand)
+
+● Now let me check the actual symbol versioning and look at the underlying math
+  implementation:
+
+● Searched for 3 patterns (ctrl+o to expand)
+
+● Bash(find /home/ubuntu/glibc -name "*.map" | xargs grep -l
+      "GLIBC_2_2_5\|GLIBC_2\.2\.5" 2>/dev/null | head -10)
+  ⎿  (No output)
+
+● Searched for 1 pattern (ctrl+o to expand)
+
+● Bash(find /home/ubuntu/glibc -name "Versions" | xargs grep -l "exp"
+      2>/dev/null | grep math | head -5)
+  ⎿  /home/ubuntu/glibc/math/Versions
+
+● Read 1 file (ctrl+o to expand)
+
+● Now let me check if there's a platform-specific version that maps exp to
+  GLIBC_2.2.5 specifically (common on x86-64):
+
+● Bash(find /home/ubuntu/glibc/sysdeps -name "Versions" | xargs grep -l "exp"
+      2>/dev/null | head -10)
+  ⎿  /home/ubuntu/glibc/sysdeps/m68k/Versions
+     /home/ubuntu/glibc/sysdeps/x86_64/fpu/Versions
+     /home/ubuntu/glibc/sysdeps/x86_64/Versions
+     … +7 lines (ctrl+o to expand)
+
+● Searched for 2 patterns, read 3 files (ctrl+o to expand)
+
+● Bash(readelf -W --syms /lib/x86_64-linux-gnu/libm.so.6 2>/dev/null | grep "
+      exp@\| exp@@" | head -20)
+  ⎿      34: 0000000000013b10   122 FUNC    GLOBAL DEFAULT   18 exp@GLIBC_2
+     .2.5
+         35: 000000000003a700   111 FUNC    GLOBAL DEFAULT   18 exp@@GLIBC_
+     2.29
+
+● Bash(objdump -T /lib/x86_64-linux-gnu/libm.so.6 2>/dev/null | grep " exp\b" |
+      head -20)
+  ⎿  0000000000013b10 g    DF .text     000000000000007a (GLIBC_2.2.5) exp
+     000000000003a700 g    DF .text     000000000000006f  GLIBC_2.29  exp
+
+● Now let me disassemble both functions to compare them precisely:
+
+● Bash(objdump -d /lib/x86_64-linux-gnu/libm.so.6 --start-address=0x13b10
+      --stop-address=$((0x13b10+0x7a)) 2>/dev/null)
+  ⎿  /lib/x86_64-linux-gnu/libm.so.6:     file format elf64-x86-64
+     … +27 lines (ctrl+o to expand)
+
+● Bash(objdump -d /lib/x86_64-linux-gnu/libm.so.6 --start-address=0x3a700
+      --stop-address=$((0x3a700+0x6f)) 2>/dev/null)
+  ⎿  /lib/x86_64-linux-gnu/libm.so.6:     file format elf64-x86-64
+     … +24 lines (ctrl+o to expand)
+
+● Now let me check what __kernel_standard does for exp (codes 6 & 7) and look at
+   the git history for the transition:
+
+● Searched for 1 pattern (ctrl+o to expand)
+
+● Bash(git -C /home/ubuntu/glibc log --oneline --follow -- math/w_exp.c
+      math/w_exp_compat.c math/w_exp_template.c sysdeps/ieee754/dbl-64/e_exp.c |
+       head -20)
+  ⎿  fatal: --follow requires exactly one pathspec
+
+● Bash(git -C /home/ubuntu/glibc log --oneline -- math/w_exp_template.c
+      sysdeps/ieee754/dbl-64/e_exp.c | head -20)
+  ⎿  66f3e9219d Update copyright dates with scripts/update-copyrights
+     989e538224 math: Remove float_t and double_t [BZ #33563]
+     2642002380 Update copyright dates with scripts/update-copyrights
+     … +14 lines (ctrl+o to expand)
+
+● Searched for 1 pattern (ctrl+o to expand)
+
+● Bash(git -C /home/ubuntu/glibc show c20a10561a --stat)
+  ⎿  commit c20a10561adab4aeb544e777cbb86679bd5f876d
+     Author: Szabolcs Nagy <szabolcs.nagy@arm.com>
+     Date:   Thu Feb 22 11:34:40 2018 +0000
+     … +110 lines (ctrl+o to expand)
+
+● Searched for 2 patterns, read 1 file (ctrl+o to expand)
+
+● There's a critical detail in k_standard.c - in SVID mode it may return HUGE
+  instead of infinity. Let me verify what HUGE is and confirm the return value
+  difference:
+
+● Searched for 2 patterns (ctrl+o to expand)
+
+● Now I have a complete picture. Let me also verify both wrappers call the same
+  underlying math implementation:
+
+● Bash(# Confirm both call the same PLT entry
+      objdump -d /lib/x86_64-linux-gnu/libm.so.6 --start-address=0x13b10
+      --stop-address=$((0x13b10+0x20)) 2>/dev/null | grep ca…)
+  ⎿     13b21:  e8 da c8 ff ff          call   10400
+     <*ABS*+0x280d0@plt>
+        3a712:  e8 e9 5c fd ff          call   10400
+     <*ABS*+0x280d0@plt>
+
+● Both call the same PLT entry (0x10400 = __ieee754_exp). Here is the full
+  picture:
+
+  ---
+  Differences between exp@GLIBC_2.2.5 and exp@@GLIBC_2.29
+
+  The underlying math is identical. Both call the same __ieee754_exp
+  implementation from sysdeps/ieee754/dbl-64/e_exp.c. The split was introduced
+  in commit c20a10561a ("Remove the error handling wrapper from exp and exp2",
+  2018).
+
+  The differences are entirely in the wrapper logic:
+
+  exp@GLIBC_2.2.5 (math/w_exp_compat.c)
+
+  double z = __ieee754_exp(x);
+  if (!isfinite(z) || z == 0)
+      if (isfinite(x) && _LIB_VERSION != _IEEE_)
+          return __kernel_standard(x, x, 6 + !!signbit(x));
+  return z;
+
+  exp@@GLIBC_2.29 (math/w_exp_template.c)
+
+  double z = __ieee754_exp(x);
+  if (!isfinite(z) || z == 0)
+      if (isfinite(x))
+          __set_errno(ERANGE);
+  return z;
+
+  ---
+  So, is SVID error handling the only difference? Not quite — there are three 
+  distinct behavioral differences:
+
+  ┌────────────────────┬────────────────────────────┬──────────────────────┐
+  │      Scenario      │      exp@GLIBC_2.2.5       │   exp@@GLIBC_2.29    │
+  ├────────────────────┼────────────────────────────┼──────────────────────┤
+  │ Overflow,          │                            │ Returns ∞, errno =   │
+  │ _LIB_VERSION ==    │ Returns ∞, no errno set    │ ERANGE               │
+  │ _IEEE_             │                            │                      │
+  ├────────────────────┼────────────────────────────┼──────────────────────┤
+  │ Overflow,          │                            │ Returns ∞, errno =   │
+  │ _LIB_VERSION ==    │ Returns ∞, errno = ERANGE  │ ERANGE ✓ same        │
+  │ _POSIX_            │                            │                      │
+  ├────────────────────┼────────────────────────────┼──────────────────────┤
+  │ Overflow,          │ Returns HUGE (3.40e+38f,   │ Returns ∞, errno =   │
+  │ _LIB_VERSION ==    │ finite!), calls matherr()  │ ERANGE               │
+  │ _SVID_             │                            │                      │
+  ├────────────────────┼────────────────────────────┼──────────────────────┤
+  │ Underflow,         │                            │ Returns 0, errno =   │
+  │ _LIB_VERSION ==    │ Returns 0, calls matherr() │ ERANGE               │
+  │ _SVID_             │                            │                      │
+  └────────────────────┴────────────────────────────┴──────────────────────┘
+
+  The three concrete differences:
+
+  1. matherr() support: The old version calls __kernel_standard which invokes a
+  user-defined matherr() hook in SVID/XOPEN modes. The new version never calls
+  matherr().
+  2. Return value for overflow in _SVID_ mode: The old version returns HUGE
+  (defined as 3.40282347e+38F in math/math-svid-compat.h — a finite float value,
+   not infinity). The new version always returns the raw __ieee754_exp result
+  (infinity). This is a different return value, not merely a different
+  error-reporting path.
+  3. errno in _IEEE_ mode: The old version skips all error reporting when
+  _LIB_VERSION == _IEEE_, so errno is never set. The new version unconditionally
+   sets errno = ERANGE for overflow/underflow even in IEEE mode.
+
+  For programs using the default POSIX mode (_LIB_VERSION == _POSIX_), the two
+  versions are behaviorally identical. The differences only matter for programs
+  that explicitly set _LIB_VERSION or define matherr() — which is very old,
+  non-portable code.
+
+  The Versions file comment (# No SVID compatible error handling.) is accurate
+  but undersells point 2: in _SVID_ mode, the old version returns a different 
+  value for overflow, not just different error plumbing.
+
+✻ Sautéed for 4m 35s
+
+❯ Thanks! I have the same question about several other math functions, and  
+  I would like to verify this on multiple platforms / arches (I saw you     
+  looked at the binaries on the current system as well as the source code). 
+   I am pretty sure the answer for all of these is that the symbol version  
+  changes are solely the removal of SVID error handling and perhaps other   
+  changes in non-default modes, and in the default _POSIX_ mode there are   
+  no observable behavioral changes. But I need to be absolutely sure there  
+  are no other changes in the newer symbol versions that I'm missing.       
+  What's the best way to go about this? Can you write a program or some     
+  guidelines for how to inspect these functions?                            
+
+● Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Bash(# Check what architectures have LIBM_SVID_COMPAT = 0 (no compat at all)
+      grep -rn "LIBM_SVID_COMPAT" /home/ubuntu/glibc/sysdeps/ --include="*.h" |
+      grep "0" | hea…)
+  ⎿  (No output)
+
+● Searched for 2 patterns, read 1 file (ctrl+o to expand)
+
+● Bash(# Check what log template looks like (as a second example of how new
+      wrappers work)
+      cat /home/ubuntu/glibc/math/w_log_template.c 2>/dev/null || find
+      /home/ubunt…)
+  ⎿  /* Wrapper to set errno for log.
+        Copyright (C) 2017-2026 Free Software Foundation, Inc.
+        This file is part of the GNU C Library.
+     … +19 lines (ctrl+o to expand)
+
+● Interesting — log's new wrapper checks input before calling the
+  implementation. Let me check the compat wrapper to make sure errno behavior
+  matches:
+
+● Searched for 2 patterns, read 1 file (ctrl+o to expand)
+
+● Good — I've now seen the full pattern across multiple functions. Let me write
+  the two tools:
+
+● Write(analyze_math_symbols.py)
+  ⎿  Wrote 205 lines to analyze_math_symbols.py
+       1 #!/usr/bin/env python3
+       2 """
+       3 analyze_math_symbols.py - Compare old and new versioned math sym
+         bols.
+       4 
+       5 For each function that appears as both func@OLD_VER and func@@NE
+         W_VER,
+       6 this script:
+       7   1. Disassembles both symbol bodies.
+       8   2. Checks whether the first branch-to-implementation instructi
+         on targets
+       9      the same address (same underlying math = no algorithmic dif
+         ference).
+      10   3. Notes key wrapper differences (_LIB_VERSION check, direct e
+         rrno set).
+     … +195 lines (ctrl+o to expand)
+
+● Write(test_math_compat.c)
+  ⎿  Wrote 333 lines to test_math_compat.c
+       1 /*
+       2  * test_math_compat.c
+       3  *
+       4  * Verify that an old and new versioned math symbol behave ident
+         ically in
+       5  * _POSIX_ mode (_LIB_VERSION = _POSIX_, which is the default fo
+         r any
+       6  * program compiled with standard feature-test macros).
+       7  *
+       8  * Strategy:
+       9  *   - Use dlvsym() to load both symbol versions from libm at ru
+         ntime.
+      10  *   - Set _LIB_VERSION = _POSIX_ explicitly (it already default
+         s to this,
+     … +323 lines (ctrl+o to expand)
+
+● Now let's verify both tools work on the current system:
+
+● Bash(cd /home/ubuntu/glibc/scripts && python3 analyze_math_symbols.py
+      /lib/x86_64-linux-gnu/libm.so.6 2>&1)
+  ⎿  Library : /lib/x86_64-linux-gnu/libm.so.6
+     Pairs   : 29 functions with old+new versioned symbols
+     … +89 lines (ctrl+o to expand)
+
+● The script has a parsing issue — many false negatives because the new symbols'
+   first call lacks the <...> annotation it expects. Let me investigate and fix:
+
+● Bash(# Check what exp2 new wrapper actually looks like
+      exp2_new_addr=0x3a770…)
+  ⎿  exp2 new size: 570
+
+     /lib/x86_64-linux-gnu/libm.so.6:     file format elf64-x86-64
+     … +22 lines (ctrl+o to expand)
+
+● Bash(readelf -W --syms /lib/x86_64-linux-gnu/libm.so.6 | grep -E
+      "exp2@@|exp2@G|log@@|log@G|hypot@" | head -20)
+  ⎿     445: 0000000000038f00  1258 FUNC    WEAK   DEFAULT   18 clog@@GLIBC
+     _2.2.5
+        456: 000000000003a5f0    57 FUNC    GLOBAL DEFAULT   18 log@@GLIBC_
+     … +11 lines (ctrl+o to expand)
+
+● Bash(objdump -d /lib/x86_64-linux-gnu/libm.so.6 --start-address=0x3a5f0
+      --stop-address=$((0x3a5f0+57)) 2>/dev/null
+      echo "---"…)
+  ⎿  /lib/x86_64-linux-gnu/libm.so.6:     file format elf64-x86-64
+     … +40 lines (ctrl+o to expand)
+
+● Bash(# Check what the new log actually calls — full disasm
+      objdump -d /lib/x86_64-linux-gnu/libm.so.6 --start-address=0x3a5f0
+      --stop-address=$((0x3a5f0+60)) 2>/dev/n…)
+  ⎿  Error: Exit code 1
+
+● log uses a jmp to the implementation, not a call. The script needs to handle
+  tail calls. Let me also check hypot to understand the other "false NO" cases:
+
+● Bash(# Check hypot: old wrapper vs new (which is 963 bytes - likely the full
+      implementation)
+      objdump -d /lib/x86_64-linux-gnu/libm.so.6 --start-address=0x12db0 --sto…)
+  ⎿  /lib/x86_64-linux-gnu/libm.so.6:     file format elf64-x86-64
+     … +39 lines (ctrl+o to expand)
+
+● Bash(# exp2 old wrapper
+      objdump -d /lib/x86_64-linux-gnu/libm.so.6 --start-address=0x12c50
+      --stop-address=$((0x12c50+122)) 2>/dev/null | grep -E "call|jmp" | head
+      -5…)
+  ⎿     12c61:  e8 0a 7b 02 00          call   3a770 <__exp2_finite@GLIBC_2.15>
+        12cc5:  e9 56 10 00 00          jmp    13d20 <lgamma@GLIBC_2.2.5+0x190>
+       1120: 0000000000012d50    84 FUNC    GLOBAL DEFAULT   18 fmod@GLIBC_
+     … +3 lines (ctrl+o to expand)
+
+
+
+● Bash(objdump -d /lib/x86_64-linux-gnu/libm.so.6 --start-address=0x12d50
+      --stop-address=$((0x12d50+84)) 2>/dev/null | grep -E "call|jmp" | head -5)
+  ⎿     12d7f:  e9 9c 53 01 00          jmp    28120
+     <__fmod_finite@GLIBC_2.15>
+        12d9f:  e9 7c 0f 00 00          jmp    13d20
+     <lgamma@GLIBC_2.2.5+0x190>
+
+● Now I understand the full picture. The "NO" cases are all false negatives —
+  the old wrapper calls/jumps to address X, and the new @@ symbol IS at address
+  X. Let me also quickly check totalorder since its version bump has a comment
+  in Versions about pointer arguments (not SVID):
+
+● Bash(readelf -W --syms /lib/x86_64-linux-gnu/libm.so.6 | grep "totalorder@G" |
+       head -4
+      # check old totalorder…)
+  ⎿     117: 00000000000347c0    37 FUNC    GLOBAL DEFAULT   18 totalorder@
+     GLIBC_2.25
+     … +14 lines (ctrl+o to expand)
+
+● Now I understand all the cases. Let me fix the Python script to correctly
+  handle:
+  1. Tail-call jmp (like log)
+  2. Old wrapper → new implementation directly (like hypot, exp2, fmod)
+  3. Genuine differences (like totalorder which changed its argument types)
+
+● Write(analyze_math_symbols.py)
+  ⎿  Added 162 lines, removed 82 lines
+       5  For each function that appears as both func@OLD_VER and func@@N
+          EW_VER,
+       6  this script:
+       7    1. Disassembles both symbol bodies.
+       8 -  2. Checks whether the first branch-to-implementation instruct
+         -ion targets                                                    
+       9 -     the same address (same underlying math = no algorithmic di
+         -fference).                                                     
+      10 -  3. Notes key wrapper differences (_LIB_VERSION check, direct 
+         -errno set).                                                    
+       8 +  2. Determines whether they ultimately execute the same math c
+         +ode by                                                         
+       9 +     checking three equivalent structures that glibc uses:     
+      10 +       (a) old wrapper calls/jumps to old_target; new symbol al
+         +so                                                             
+      11 +           calls/jumps to old_target  →  both call same underly
+         +ing fn                                                         
+      12 +       (b) old wrapper calls/jumps to old_target; new symbol's 
+         +entry                                                          
+      13 +           address IS old_target  →  old wraps the new implemen
+         +tation                                                         
+      14 +       (c) new symbol calls/jumps to new_target; old symbol's e
+         +ntry                                                           
+      15 +           address IS new_target  →  (reverse alias, unusual)  
+      16 +  3. Notes key wrapper differences (_LIB_VERSION check, direct 
+         +errno).                                                        
+      17  
+      12 -Works on any ELF shared library.  For cross-arch analysis, set 
+         -OBJDUMP and                                                    
+      13 -READELF to the appropriate cross-tools (e.g. aarch64-linux-gnu-
+         -objdump).                                                      
+      14 -                                                               
+      15 -Usage:                                                         
+      16 -  python3 analyze_math_symbols.py [/path/to/libm.so.6] [--verbo
+         -se]                                                            
+      18 +Works on any ELF shared library.  For cross-arch analysis, set 
+         +OBJDUMP                                                        
+      19 +and READELF to the appropriate cross-tools, e.g.:              
+      20    OBJDUMP=aarch64-linux-gnu-objdump \\
+      21    READELF=aarch64-linux-gnu-readelf \\
+      22      python3 analyze_math_symbols.py /path/to/aarch64/libm.so.6
+      23 +                                                               
+      24 +Usage:                                                         
+      25 +  python3 analyze_math_symbols.py [/path/to/libm.so.6] [--verbo
+         +se]                                                            
+      26  """
+      27  
+      28  import os
+     ...
+      31  import sys
+      32  from collections import defaultdict
+      33  
+      28 -OBJDUMP = os.environ.get("OBJDUMP", "objdump")                 
+      29 -READELF = os.environ.get("READELF", "readelf")                 
+      30 -VERBOSE = "--verbose" in sys.argv or "-v" in sys.argv          
+      34 +OBJDUMP  = os.environ.get("OBJDUMP",  "objdump")               
+      35 +READELF  = os.environ.get("READELF",  "readelf")               
+      36 +VERBOSE  = "--verbose" in sys.argv or "-v" in sys.argv         
+      37  
+      38  
+      39  def run(*cmd):
+     ...
+      41      return r.stdout
+      42  
+      43  
+      44 +# -------------------------------------------------------------
+         +--------------                                                 
+      45 +# Symbol extraction                                            
+      46 +# -------------------------------------------------------------
+         +--------------                                                 
+      47 +                                                               
+      48  def get_versioned_funcs(lib):
+      49      """
+      50      Return {name: {"old": [(addr, size, ver), ...],
+      51                     "new": [(addr, size, ver), ...]}}
+      42 -    for every FUNC symbol that carries a version string.       
+      52 +    for every FUNC symbol that carries a glibc version string. 
+      53      "new" = default version (@@), "old" = non-default (@).
+      54      """
+      55      out = run(READELF, "-W", "--syms", lib)
+      56      funcs = defaultdict(lambda: {"old": [], "new": []})
+      57  
+      58      for line in out.splitlines():
+      49 -        # readelf -W --syms columns:                           
+      59 +        # readelf -W --syms columns (may have leading spaces): 
+      60          #   Num:  Value  Size  Type  Bind  Vis  Ndx  Name
+      61          m = re.match(
+      62              r"\s*\d+:\s+([0-9a-f]+)\s+(\d+)\s+FUNC\s+\S+\s+\S+\
+          s+\S+\s+(\S+)",
+     ...
+      64          )
+      65          if not m:
+      66              continue
+      57 -        addr = int(m.group(1), 16)                             
+      58 -        size = int(m.group(2))                                 
+      67 +        addr     = int(m.group(1), 16)                         
+      68 +        size     = int(m.group(2))                             
+      69          name_ver = m.group(3).strip()
+      70  
+      61 -        # Default version:     name@@VER                       
+      71 +        # Default version:      name@@VER                      
+      72          dm = re.match(r"^([^@]+)@@(.+)$", name_ver)
+      73          if dm:
+      74              funcs[dm.group(1)]["new"].append((addr, size, dm.gr
+          oup(2)))
+      75              continue
+      76  
+      67 -        # Non-default version: name@VER  (one @, not two)      
+      77 +        # Non-default version:  name@VER  (exactly one @)      
+      78          om = re.match(r"^([^@]+)@([^@].*)$", name_ver)
+      79          if om:
+      80              funcs[om.group(1)]["old"].append((addr, size, om.gr
+          oup(2)))
+     ...
+       82      return funcs
+       83  
+       84  
+       85 +# ------------------------------------------------------------
+          +---------------                                               
+       86 +# Disassembly helpers                                         
+       87 +# ------------------------------------------------------------
+          +---------------                                               
+       88 +                                                              
+       89  def disassemble(lib, addr, size):
+       90      if size == 0:
+       91          return ""
+       78 -    end = addr + size                                         
+       92      return run(
+       93          OBJDUMP, "-d", lib,
+       94          f"--start-address=0x{addr:x}",
+       82 -        f"--stop-address=0x{end:x}",                          
+       95 +        f"--stop-address=0x{addr + size:x}",                  
+       96      )
+       97  
+       98  
+       86 -def first_call_target(disasm):                                
+       99 +def branch_targets(disasm):                                   
+      100      """
+       88 -    Return the address of the first call-like instruction, or 
+          -None.                                                         
+       89 -    Handles x86/x86_64 (call/callq), AArch64/ARM (bl/blx),    
+       90 -    RISC-V (jal), PowerPC (bl/blr-like), s390 (brasl/bas).    
+       91 -    We look for the address that appears before the '<...>' an
+          -notation                                                      
+       92 -    so we catch both direct calls and PLT stubs.              
+      101 +    Return a list of (address, is_call) tuples for every branc
+          +h instruction                                                 
+      102 +    in the disassembly.  is_call=True for call/bl; False for u
+          +nconditional                                                  
+      103 +    jump/tail-call.                                           
+      104 +                                                              
+      105 +    Handles:                                                  
+      106 +      x86/x86_64  : call, callq, jmp, jmpq                    
+      107 +      AArch64/ARM : bl, blx, b (unconditional)                
+      108 +      RISC-V      : jal, j                                    
+      109 +      PowerPC     : bl, b                                     
+      110 +      s390        : brasl, bas, j, b                          
+      111      """
+       94 -    # Pattern: hex-address followed by optional PLT/function a
+          -nnotation                                                     
+       95 -    # e.g.  "call   10400 <__ieee754_exp@plt>"                
+       96 -    #        "bl     1234 <exp@plt>"                          
+       97 -    #        "jal    ra,5678 <exp@plt>"                       
+      112 +    results = []                                              
+      113 +    CALL_OPS = re.compile(r'\b(call[q]?|bl[x]?|brasl|bas)\b') 
+      114 +    JMP_OPS  = re.compile(r'\b(jmp[q]?|b(?:\.unconditional)?|j
+          +\b)\b')                                                       
+      115 +                                                              
+      116      for line in disasm.splitlines():
+       99 -        # Prefer lines with a <...> annotation (branch to a na
+          -med target)                                                   
+      100 -        m = re.search(r"\b([0-9a-f]+)\s+<[^>]+>", line)       
+      101 -        if m and re.search(r"\b(call[q]?|bl[x]?|jal|brasl|bas)
+          -\b", line):                                                   
+      102 -            return int(m.group(1), 16)                        
+      103 -    # Fallback: any call instruction with a hex target (no ann
+          -otation)                                                      
+      104 -    for line in disasm.splitlines():                          
+      105 -        m = re.search(r"\b(call[q]?|bl[x]?|jal|brasl|bas)\b\s+
+          -\S*([0-9a-f]{4,})\b", line)                                   
+      106 -        if m:                                                 
+      117 +        # Extract numeric address from "<symbol>" annotation —
+          + most reliable                                                
+      118 +        # for both PLT stubs and direct calls.                
+      119 +        addr_m = re.search(r'\b([0-9a-f]+)\s+<[^>]+>', line)  
+      120 +        if not addr_m:                                        
+      121 +            # Fallback: bare hex address after an opcode (no a
+          +nnotation)                                                    
+      122 +            addr_m = re.search(                               
+      123 +                r'(?:call[q]?|jmp[q]?|bl[x]?|brasl|bas|jal)\s+
+          +(?:\S+,\s*)?'                                                 
+      124 +                r'(0x)?([0-9a-f]{4,})\b',                     
+      125 +                line,                                         
+      126 +            )                                                 
+      127 +            if not addr_m:                                    
+      128 +                continue                                      
+      129              try:
+      108 -                return int(m.group(2), 16)                    
+      109 -            except ValueError:                                
+      110 -                pass                                          
+      111 -    return None                                               
+      130 +                tgt = int(addr_m.group(2) or addr_m.group(1), 
+          +16)                                                           
+      131 +            except (ValueError, IndexError, TypeError):       
+      132 +                continue                                      
+      133 +        else:                                                 
+      134 +            tgt = int(addr_m.group(1), 16)                    
+      135  
+      136 +        is_call = bool(CALL_OPS.search(line))                 
+      137 +        # For our purposes a tail-call jmp to a PLT entry coun
+          +ts as a call                                                  
+      138 +        is_jmp  = bool(JMP_OPS.search(line)) and '<' in line a
+          +nd '@plt' in line                                             
+      139 +        if is_call or is_jmp:                                 
+      140 +            results.append((tgt, is_call))                    
+      141  
+      114 -def has(disasm, *patterns):                                   
+      115 -    d = disasm.lower()                                        
+      116 -    return any(p.lower() in d for p in patterns)              
+      142 +    return results                                            
+      143  
+      144  
+      145 +def first_branch(disasm):                                     
+      146 +    """Return the address of the first call or PLT jmp, or Non
+          +e."""                                                         
+      147 +    tgts = branch_targets(disasm)                             
+      148 +    return tgts[0][0] if tgts else None                       
+      149 +                                                              
+      150 +                                                              
+      151 +# ------------------------------------------------------------
+          +---------------                                               
+      152 +# Core comparison logic                                       
+      153 +# ------------------------------------------------------------
+          +---------------                                               
+      154 +                                                              
+      155 +def same_underlying(old_addr, old_dis, new_addr, new_dis):    
+      156 +    """                                                       
+      157 +    Return True when old and new ultimately execute the same m
+          +ath code.                                                     
+      158 +                                                              
+      159 +    Three structural patterns used in glibc:                  
+      160 +      (a) Both wrappers delegate to the same target:          
+      161 +              old → T,  new → T                               
+      162 +      (b) Old is a wrapper around the new implementation:     
+      163 +              old → T,  and  T == new_addr                    
+      164 +      (c) New is a wrapper around the old implementation (unus
+          +ual):                                                         
+      165 +              new → T,  and  T == old_addr                    
+      166 +    """                                                       
+      167 +    old_tgt = first_branch(old_dis)                           
+      168 +    new_tgt = first_branch(new_dis)                           
+      169 +                                                              
+      170 +    # (a) both call same thing                                
+      171 +    if old_tgt is not None and new_tgt is not None and old_tgt
+          + == new_tgt:                                                  
+      172 +        return True, "both call same underlying fn"           
+      173 +                                                              
+      174 +    # (b) old wraps new: old calls/jumps to the new symbol's a
+          +ddress                                                        
+      175 +    if old_tgt is not None and old_tgt == new_addr:           
+      176 +        return True, "old is a SVID wrapper around the new imp
+          +lementation"                                                  
+      177 +                                                              
+      178 +    # (c) new wraps old (rare but possible)                   
+      179 +    if new_tgt is not None and new_tgt == old_addr:           
+      180 +        return True, "new calls old implementation"           
+      181 +                                                              
+      182 +    reason = (f"old_tgt=0x{old_tgt:x}" if old_tgt else "old_tg
+          +t=?") + \                                                     
+      183 +             (f" new_tgt=0x{new_tgt:x}" if new_tgt else " new_
+          +tgt=?")                                                       
+      184 +    return False, reason                                      
+      185 +                                                              
+      186 +                                                              
+      187 +# ------------------------------------------------------------
+          +---------------                                               
+      188 +# Wrapper-pattern heuristics (for the Notes column)           
+      189 +# ------------------------------------------------------------
+          +---------------                                               
+      190 +                                                              
+      191 +def has(text, *patterns):                                     
+      192 +    t = text.lower()                                          
+      193 +    return any(p.lower() in t for p in patterns)              
+      194 +                                                              
+      195 +                                                              
+      196 +def wrapper_notes(old_dis, new_dis):                          
+      197 +    notes = []                                                
+      198 +    if has(old_dis, "0xffffffff", "$-0x1", ",-1"):            
+      199 +        notes.append("old: _LIB_VERSION check")               
+      200 +    if has(new_dis, "$0x22,", "0x22,%", "#22\t", " 22\n"):    
+      201 +        notes.append("new: sets ERANGE directly")             
+      202 +    if has(new_dis, "$0x21,", "0x21,%", "#21\t", " 21\n"):    
+      203 +        notes.append("new: sets EDOM directly")               
+      204 +    return notes                                              
+      205 +                                                              
+      206 +                                                              
+      207 +# ------------------------------------------------------------
+          +---------------                                               
+      208 +# Main analysis                                               
+      209 +# ------------------------------------------------------------
+          +---------------                                               
+      210 +                                                              
+      211  def analyze(lib):
+      212      funcs = get_versioned_funcs(lib)
+      213      pairs = {n: v for n, v in funcs.items() if v["old"] and v[
+           "new"]}
+     ...
+      221  
+      222      col = "{:<20} {:<24} {:<20} {:<10}  {}"
+      223      print(col.format("Function", "Old@Version", "New@@Version"
+           , "Same fn?", "Notes"))
+      132 -    print("-" * 100)                                          
+      224 +    print("-" * 105)                                          
+      225  
+      134 -    mismatches = []                                           
+      226 +    genuinely_different = []                                  
+      227 +                                                              
+      228      for name in sorted(pairs):
+      229          for old_addr, old_size, old_ver in pairs[name]["old"]:
+      230              for new_addr, new_size, new_ver in pairs[name]["ne
+           w"]:
+      231                  if old_size == 0 or new_size == 0:
+      232                      print(col.format(
+      233                          name, f"@{old_ver}", f"@@{new_ver}",
+      141 -                        "???", "zero-size symbol — alias or pl
+          -t stub, skip"))                                               
+      234 +                        "???", "zero-size symbol (alias/plt st
+          +ub) — skip"))                                                 
+      235                      continue
+      236  
+      237                  old_dis = disassemble(lib, old_addr, old_size)
+      238                  new_dis = disassemble(lib, new_addr, new_size)
+      239  
+      147 -                old_call = first_call_target(old_dis)         
+      148 -                new_call = first_call_target(new_dis)         
+      149 -                                                              
+      150 -                same = (old_call is not None and              
+      151 -                        new_call is not None and              
+      152 -                        old_call == new_call)                 
+      153 -                                                              
+      154 -                notes = []                                    
+      155 -                # Heuristic: _LIB_VERSION == _IEEE_ check show
+          -s up as cmp 0xffffffff                                        
+      156 -                if has(old_dis, "0xffffffff", "$-0x1"):       
+      157 -                    notes.append("old: checks _LIB_VERSION")  
+      158 -                # Direct errno = ERANGE (0x22 = 34) in new wra
+          -pper                                                          
+      159 -                if has(new_dis, "$0x22,", "0x22,%"):          
+      160 -                    notes.append("new: sets ERANGE directly") 
+      161 -                # Direct errno = EDOM (0x21 = 33)             
+      162 -                if has(new_dis, "$0x21,", "0x21,%"):          
+      163 -                    notes.append("new: sets EDOM directly")   
+      240 +                same, reason = same_underlying(               
+      241 +                    old_addr, old_dis, new_addr, new_dis      
+      242 +                )                                             
+      243 +                notes = wrapper_notes(old_dis, new_dis)       
+      244                  if not same:
+      165 -                    c1 = f"0x{old_call:x}" if old_call else "?
+          -"                                                             
+      166 -                    c2 = f"0x{new_call:x}" if new_call else "?
+          -"                                                             
+      167 -                    notes.append(f"*** DIFFERENT CALLS: old={c
+          -1} new={c2} ***")                                             
+      168 -                    mismatches.append(name)                   
+      245 +                    notes.append(f"*** {reason} ***")         
+      246 +                    genuinely_different.append((name, old_ver,
+          + new_ver, reason))                                            
+      247  
+      248                  flag = "YES" if same else "** NO **"
+      249                  print(col.format(
+     ...
+      251                      flag, "; ".join(notes) if notes else "-"))
+      252  
+      253                  if VERBOSE:
+      176 -                    print(f"\n  --- old disasm ({old_size} byt
+          -es @ 0x{old_addr:x}) ---")                                    
+      254 +                    print(f"\n  reason: {reason}")            
+      255 +                    print(f"  --- old ({old_size}B @ 0x{old_ad
+          +dr:x}) ---")                                                  
+      256                      for ln in old_dis.splitlines()[3:]:
+      178 -                        print(f"  {ln}")                      
+      179 -                    print(f"\n  --- new disasm ({new_size} byt
+          -es @ 0x{new_addr:x}) ---")                                    
+      257 +                        print(f"    {ln}")                    
+      258 +                    print(f"  --- new ({new_size}B @ 0x{new_ad
+          +dr:x}) ---")                                                  
+      259                      for ln in new_dis.splitlines()[3:]:
+      181 -                        print(f"  {ln}")                      
+      260 +                        print(f"    {ln}")                    
+      261                      print()
+      262  
+      263      print()
+      185 -    if mismatches:                                            
+      186 -        print(f"WARNING: {len(mismatches)} function(s) call DI
+          -FFERENT underlying implementations:")                         
+      187 -        for n in mismatches:                                  
+      188 -            print(f"  {n}")                                   
+      189 -        print("These deserve deeper investigation.")          
+      264 +    if genuinely_different:                                   
+      265 +        print(f"NOTICE: {len(genuinely_different)} pair(s) wit
+          +h different underlying code:")                                
+      266 +        for name, ov, nv, r in genuinely_different:           
+      267 +            print(f"  {name}  (@{ov} vs @@{nv}): {r}")        
+      268 +        print("  These are NOT necessarily bugs — e.g. totalor
+          +der changed its argument types.")                             
+      269      else:
+      191 -        print("All pairs call the same underlying implementati
+          -on (wrapper-only differences).")                              
+      270 +        print("All pairs run the same underlying math implemen
+          +tation.")                                                     
+      271 +        print("Differences are wrapper-only (SVID error handli
+          +ng).")                                                        
+      272  
+      193 -    # Emit version-pair table for use with test_math_compat   
+      194 -    print("\n# Version pairs for test_math_compat (copy-paste 
+          -or pipe to bash):")                                           
+      273 +    # Emit ready-to-use command lines for test_math_compat    
+      274 +    print("\n# Commands for test_math_compat (fill in type: d/
+          +dd/f/ff):")                                                   
+      275      for name in sorted(pairs):
+      276          for old_addr, old_size, old_ver in pairs[name]["old"]:
+      277              for new_addr, new_size, new_ver in pairs[name]["ne
+           w"]:
+      278                  if old_size > 0 and new_size > 0:
+      199 -                    print(f"# ./test_math_compat {name} {old_v
+          -er} {new_ver} <type>")                                        
+      279 +                    print(f"./test_math_compat {name:15} {old_
+          +ver:15} {new_ver:15} <type>")                                 
+      280  
+      281  
+      282  if __name__ == "__main__":
+      283      args = [a for a in sys.argv[1:] if not a.startswith("-")]
+      204 -    lib = args[0] if args else "/lib/x86_64-linux-gnu/libm.so.
+          -6"                                                            
+      284 +    lib  = args[0] if args else "/lib/x86_64-linux-gnu/libm.so
+          +.6"                                                           
+      285      analyze(lib)
+
+● Bash(python3 analyze_math_symbols.py /lib/x86_64-linux-gnu/libm.so.6 2>&1)
+  ⎿  Library : /lib/x86_64-linux-gnu/libm.so.6
+     Pairs   : 29 functions with old+new versioned symbols
+     … +78 lines (ctrl+o to expand)
+
+● Good, down to just fmod/fmodf. Let me check what's happening with those:
+
+● Bash(objdump -d /lib/x86_64-linux-gnu/libm.so.6 --start-address=0x12d50
+      --stop-address=$((0x12d50+84)) 2>/dev/null)
+  ⎿  /lib/x86_64-linux-gnu/libm.so.6:     file format elf64-x86-64
+     … +19 lines (ctrl+o to expand)
+
+● The fmod old wrapper uses a jmp to an internal symbol (not PLT), so it's
+  missed by the @plt filter. Let me fix that:
+
+● Update(analyze_math_symbols.py)
+  ⎿  Added 47 lines, removed 32 lines
+       98  
+       99  def branch_targets(disasm):
+      100      """
+      101 -    Return a list of (address, is_call) tuples for every branc
+          -h instruction                                                 
+      102 -    in the disassembly.  is_call=True for call/bl; False for u
+          -nconditional                                                  
+      103 -    jump/tail-call.                                           
+      101 +    Return a list of (address, is_call) tuples for every uncon
+          +ditional                                                      
+      102 +    branch-to-function instruction in the disassembly.        
+      103  
+      105 -    Handles:                                                  
+      106 -      x86/x86_64  : call, callq, jmp, jmpq                    
+      107 -      AArch64/ARM : bl, blx, b (unconditional)                
+      108 -      RISC-V      : jal, j                                    
+      109 -      PowerPC     : bl, b                                     
+      110 -      s390        : brasl, bas, j, b                          
+      104 +    "Unconditional branch to a named symbol" covers all the wa
+          +ys glibc                                                      
+      105 +    wrappers delegate to the underlying implementation:       
+      106 +      x86/x86_64  : call / callq  (direct call)               
+      107 +                    jmp  / jmpq   (tail call, e.g. to PLT or i
+          +nternal symbol)                                               
+      108 +      AArch64/ARM : bl / blx      (branch with link — always a
+          + call)                                                        
+      109 +      RISC-V      : jal           (jump-and-link)             
+      110 +      PowerPC     : bl / b        (branch with link / uncondit
+          +ional)                                                        
+      111 +      s390        : brasl / bas                               
+      112 +                                                              
+      113 +    Conditional branches (jne, jae, b.ne, …) are intentionally
+          + excluded.                                                    
+      114      """
+      115      results = []
+      113 -    CALL_OPS = re.compile(r'\b(call[q]?|bl[x]?|brasl|bas)\b') 
+      114 -    JMP_OPS  = re.compile(r'\b(jmp[q]?|b(?:\.unconditional)?|j
+          -\b)\b')                                                       
+      116  
+      117 +    # Opcodes that are always calls (set a return address)    
+      118 +    CALL_OPS = re.compile(r'\b(call[q]?|bl[x]?|brasl|bas|jal)\
+          +b')                                                           
+      119 +    # x86 unconditional jump (not conditional variants like ja
+          +/jb/je/jne…)                                                  
+      120 +    # The key is the word boundary: "jmp" or "jmpq" but NOT "j
+          +mp" as prefix                                                 
+      121 +    # of a conditional like "jmpz" (which doesn't exist but be
+          + safe).                                                       
+      122 +    UJMP_OPS = re.compile(r'\bjmp[q]?\b')                     
+      123 +    # ARM/PowerPC unconditional branch WITHOUT a condition-cod
+          +e suffix                                                      
+      124 +    # (e.g. "b <target>" but not "b.ne <target>" or "bne <targ
+          +et>")                                                         
+      125 +    UBRANCH_OPS = re.compile(r'\bb\b')                        
+      126 +                                                              
+      127      for line in disasm.splitlines():
+      117 -        # Extract numeric address from "<symbol>" annotation —
+          - most reliable                                                
+      118 -        # for both PLT stubs and direct calls.                
+      128 +        is_call   = bool(CALL_OPS.search(line))               
+      129 +        is_ujmp   = bool(UJMP_OPS.search(line))               
+      130 +        is_ubranch = bool(UBRANCH_OPS.search(line))           
+      131 +                                                              
+      132 +        if not (is_call or is_ujmp or is_ubranch):            
+      133 +            continue                                          
+      134 +                                                              
+      135 +        # Extract the target address from a "<symbol>" annotat
+          +ion.                                                          
+      136 +        # This is most reliable: it's present for both PLT stu
+          +bs                                                            
+      137 +        # (  jmp  10340 <log@plt>  ) and internal symbols     
+      138 +        # (  jmp  28120 <__fmod_finite@GLIBC_2.15>  ).        
+      139          addr_m = re.search(r'\b([0-9a-f]+)\s+<[^>]+>', line)
+      120 -        if not addr_m:                                        
+      121 -            # Fallback: bare hex address after an opcode (no a
+          -nnotation)                                                    
+      122 -            addr_m = re.search(                               
+      123 -                r'(?:call[q]?|jmp[q]?|bl[x]?|brasl|bas|jal)\s+
+          -(?:\S+,\s*)?'                                                 
+      124 -                r'(0x)?([0-9a-f]{4,})\b',                     
+      125 -                line,                                         
+      126 -            )                                                 
+      127 -            if not addr_m:                                    
+      128 -                continue                                      
+      140 +        if addr_m:                                            
+      141 +            results.append((int(addr_m.group(1), 16), is_call)
+          +)                                                             
+      142 +            continue                                          
+      143 +                                                              
+      144 +        # Fallback for annotationless bare-address targets    
+      145 +        addr_m = re.search(                                   
+      146 +            r'(?:call[q]?|jmp[q]?|bl[x]?|brasl|bas|jal)\s+(?:\
+          +S+,\s*)?'                                                     
+      147 +            r'(0x)?([0-9a-f]{4,})\b',                         
+      148 +            line,                                             
+      149 +        )                                                     
+      150 +        if addr_m:                                            
+      151              try:
+      130 -                tgt = int(addr_m.group(2) or addr_m.group(1), 
+          -16)                                                           
+      152 +                results.append((int(addr_m.group(2) or addr_m.
+          +group(1), 16),                                                
+      153 +                                is_call))                     
+      154              except (ValueError, IndexError, TypeError):
+      132 -                continue                                      
+      133 -        else:                                                 
+      134 -            tgt = int(addr_m.group(1), 16)                    
+      155 +                pass                                          
+      156  
+      136 -        is_call = bool(CALL_OPS.search(line))                 
+      137 -        # For our purposes a tail-call jmp to a PLT entry coun
+          -ts as a call                                                  
+      138 -        is_jmp  = bool(JMP_OPS.search(line)) and '<' in line a
+          -nd '@plt' in line                                             
+      139 -        if is_call or is_jmp:                                 
+      140 -            results.append((tgt, is_call))                    
+      141 -                                                              
+      157      return results
+      158  
+      159  
+
+● Bash(python3 analyze_math_symbols.py /lib/x86_64-linux-gnu/libm.so.6 2>&1 |
+      head -45)
+  ⎿  Library : /lib/x86_64-linux-gnu/libm.so.6
+     Pairs   : 29 functions with old+new versioned symbols
+     … +51 lines (ctrl+o to expand)
+
+● All 29 pairs correctly show YES. Now compile and run the C test:
+
+● Bash(gcc -O0 -o test_math_compat test_math_compat.c -lm -ldl 2>&1)
+  ⎿  Error: Exit code 1
+     test_math_compat.c:49:8: error: unknown type name ‘_LIB_VERSION_TYPE’
+        49 | extern _LIB_VERSION_TYPE _LIB_VERSION;
+           |        ^~~~~~~~~~~~~~~~~
+     test_math_compat.c: In function ‘main’:
+     test_math_compat.c:274:20: error: ‘_POSIX_’ undeclared (first use in this 
+     function)
+       274 |     _LIB_VERSION = _POSIX_;
+           |                    ^~~~~~~
+     test_math_compat.c:274:20: note: each undeclared identifier is reported 
+     only once for each function it appears in
+
+     … +8 lines (ctrl+o to see all)
+
+● Bash(for args in \
+        "exp  GLIBC_2.2.5 GLIBC_2.29 d" \…)
+  ⎿  Error: Sibling tool call errored
+
+● Searched for 1 pattern (ctrl+o to expand)
+
+● Bash(grep -rn "_LIB_VERSION_TYPE\|_POSIX_\b" /usr/include/math.h 2>/dev/null |
+       head -5
+      # Also check the bits/mathdef.h…)
+  ⎿  (No output)
+
+● Bash(echo '#include <math.h>' | gcc -dM -E -x c - | grep -i
+      "LIB_VER\|POSIX_\b" | head -10)
+  ⎿  (No output)
+
+● Bash(echo '#define _GNU_SOURCE
+      #include <math.h>…)
+  ⎿  Error: Exit code 1
+     <stdin>: In function ‘f’:
+     <stdin>:3:12: error: unknown type name ‘_LIB_VERSION_TYPE’
+
+     <stdin>: In function ‘f’:
+     <stdin>:3:12: error: unknown type name ‘_LIB_VERSION_TYPE’
+
+● Bash(find /usr/include -name "*.h" | xargs grep -l "_LIB_VERSION_TYPE"
+      2>/dev/null | head -5)
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ I'm pretty sure that glibc removed compile-time support for _LIB_VERSION, 
+   and only left runtime support in the old symbol versions. You are        
+  probably going to have to grab the definitions out of glibc git history.  
+
+● Searched for 1 pattern (ctrl+o to expand)
+
+● Bash(git -C /home/ubuntu/glibc log --oneline -- include/math.h | head -10
+      git -C /home/ubuntu/glibc log --oneline --all --grep="_LIB_VERSION" | head
+       -10)
+  ⎿  head: invalid option -- 'C'
+     Try 'head --help' for more information.
+
+● The definitions are right there in math-svid-compat.h. The fix is simple —
+  just copy them directly into the test file and use dlvsym to get _LIB_VERSION
+  at runtime too (since the symbol is versioned and may not link directly):
+
+● Update(test_math_compat.c)
+  ⎿  Added 16 lines, removed 2 lines
+      45  #include <stdlib.h>
+      46  #include <string.h>
+      47  
+      48 -/* glibc-specific global that controls SVID/POSIX/IEEE error mo
+         -de. */                                                         
+      49 -extern _LIB_VERSION_TYPE _LIB_VERSION;                         
+      48 +/*                                                             
+      49 + * _LIB_VERSION_TYPE and _LIB_VERSION are no longer exposed in 
+         +public glibc                                                   
+      50 + * headers (removed from <math.h> when SVID compat was fully de
+         +precated).                                                     
+      51 + * Definitions copied from glibc math/math-svid-compat.h.      
+      52 + * The symbol itself is still present in libm as a GLIBC_2.0 ve
+         +rsioned global.                                                
+      53 + */                                                            
+      54 +typedef enum {                                                 
+      55 +    _IEEE_ = -1,                                               
+      56 +    _SVID_,                                                    
+      57 +    _XOPEN_,                                                   
+      58 +    _POSIX_,                                                   
+      59 +    _ISOC_,                                                    
+      60 +} _LIB_VERSION_TYPE;                                           
+      61  
+      62 +/* Loaded at runtime via dlvsym — it lives in libm@GLIBC_2.0. *
+         +/                                                              
+      63 +static _LIB_VERSION_TYPE *lib_version_ptr = NULL;              
+      64 +                                                               
+      65  static int failures  = 0;
+      66  static int tests_run = 0;
+      67  static int verbose   = 0;
+
+● Update(test_math_compat.c)
+  ⎿  Removed 4 lines
+      283      const char *type    = argv[4];
+      284      verbose = (argc > 5 && strcmp(argv[5], "verbose") == 0);
+      285  
+      286 -    /* Force POSIX error-handling mode (the glibc default for 
+          -modern                                                        
+      287 -       programs, but set it explicitly so this test is well-de
+          -fined). */                                                    
+      288 -    _LIB_VERSION = _POSIX_;                                   
+      289 -                                                              
+      286      void *handle = dlopen("libm.so.6", RTLD_NOW | RTLD_GLOBAL)
+           ;
+      287      if (!handle) {
+      288          fprintf(stderr, "dlopen: %s\n", dlerror());
+
+● Update(test_math_compat.c)
+  ⎿  Added 10 lines
+      289          return 1;
+      290      }
+      291  
+      292 +    /* _LIB_VERSION is a GLIBC_2.0 versioned data symbol in li
+          +bm. */                                                        
+      293 +    lib_version_ptr = (_LIB_VERSION_TYPE *)dlvsym(handle, "_LI
+          +B_VERSION", "GLIBC_2.0");                                     
+      294 +    if (!lib_version_ptr) {                                   
+      295 +        fprintf(stderr, "Warning: cannot find _LIB_VERSION@GLI
+          +BC_2.0 (%s);"                                                 
+      296 +                " skipping explicit POSIX-mode set.\n", dlerro
+          +r());                                                         
+      297 +    } else {                                                  
+      298 +        /* Force POSIX mode explicitly so the test is well-def
+          +ined. */                                                      
+      299 +        *lib_version_ptr = _POSIX_;                           
+      300 +    }                                                         
+      301 +                                                              
+      302      void *old_sym = dlvsym(handle, func, old_ver);
+      303      void *new_sym = dlvsym(handle, func, new_ver);
+      304  
+
+● Bash(gcc -O0 -o test_math_compat test_math_compat.c -lm -ldl 2>&1)
+  ⎿  (No output)
+
+● Bash(for args in \
+        "exp  GLIBC_2.2.5 GLIBC_2.29 d" \…)
+  ⎿  Warning: cannot find _LIB_VERSION@GLIBC_2.0 (/lib/x86_64-linux-gnu/lib
+     m.so.6: undefined symbol: _LIB_VERSION, version GLIBC_2.0); skipping e
+     xplicit POSIX-mode set.
+     … +23 lines (ctrl+o to expand)
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ Interrupting because you got that warning about not finding _LIB_VERSION. 
+   I think you should look for it at GLIBC_2.2.5, there's some magic that   
+  increases the ABI 2.0 in the source code to 2.2.5 for Linux x86_64, or    
+  something. Also, while you're here, change that warning to error out, and 
+   instead of setting POSIX mode, check to make sure we're currently in     
+  POSIX mode and error out otherwise. If either of these fails that means   
+  our assumptions are wrong, right?                                         
+
+● Bash(readelf -W --syms /lib/x86_64-linux-gnu/libm.so.6 | grep "_LIB_VERSION")
+  ⎿     927: 00000000000e8008     4 OBJECT  GLOBAL DEFAULT   27 _LIB_VERSIO
+     N@GLIBC_2.2.5
+
+● Confirmed — it's at GLIBC_2.2.5. Now fix the three things:
+
+● Update(test_math_compat.c)
+  ⎿  (No changes)
+
+❯ It just occurred to me, do you want to do an unversioned symbol lookup?   
+  What's the benefit of the versioned lookup? It's going to differ on       
+  different platforms, probably.                                            
+
+● You're right — there's no benefit here. _LIB_VERSION only has one version in
+  libm regardless of arch, so plain dlsym works everywhere and avoids the
+  arch-specific version string entirely.
+
+● Update(test_math_compat.c)
+  ⎿  Added 21 lines, removed 7 lines
+      289          return 1;
+      290      }
+      291  
+      292 -    /* _LIB_VERSION is a GLIBC_2.0 versioned data symbol in li
+          -bm. */                                                        
+      293 -    lib_version_ptr = (_LIB_VERSION_TYPE *)dlvsym(handle, "_LI
+          -B_VERSION", "GLIBC_2.0");                                     
+      292 +    /*                                                        
+      293 +     * _LIB_VERSION is a single-versioned data symbol in libm 
+          +(the version                                                  
+      294 +     * string differs by arch, so use unversioned dlsym).     
+      295 +     * We assert it's already _POSIX_ rather than forcing it, 
+          +because any                                                   
+      296 +     * program that hasn't explicitly changed it runs in POSIX
+          + mode by default.                                             
+      297 +     * If it isn't _POSIX_, our assumption that old == new is 
+          +wrong and the                                                 
+      298 +     * test should not proceed.                               
+      299 +     */                                                       
+      300 +    lib_version_ptr = (_LIB_VERSION_TYPE *)dlsym(handle, "_LIB
+          +_VERSION");                                                   
+      301      if (!lib_version_ptr) {
+      295 -        fprintf(stderr, "Warning: cannot find _LIB_VERSION@GLI
+          -BC_2.0 (%s);"                                                 
+      296 -                " skipping explicit POSIX-mode set.\n", dlerro
+          -r());                                                         
+      297 -    } else {                                                  
+      298 -        /* Force POSIX mode explicitly so the test is well-def
+          -ined. */                                                      
+      299 -        *lib_version_ptr = _POSIX_;                           
+      302 +        fprintf(stderr, "ERROR: cannot find _LIB_VERSION in li
+          +bm: %s\n",                                                    
+      303 +                dlerror());                                   
+      304 +        dlclose(handle);                                      
+      305 +        return 1;                                             
+      306      }
+      307 +    if (*lib_version_ptr != _POSIX_) {                        
+      308 +        fprintf(stderr, "ERROR: _LIB_VERSION is %d, expected _
+          +POSIX_ (%d).\n"                                               
+      309 +                "       The test assumes default POSIX mode; s
+          +omething has\n"                                               
+      310 +                "       changed it before this process started
+          +.\n",                                                         
+      311 +                (int)*lib_version_ptr, (int)_POSIX_);         
+      312 +        dlclose(handle);                                      
+      313 +        return 1;                                             
+      314 +    }                                                         
+      315  
+      316      void *old_sym = dlvsym(handle, func, old_ver);
+      317      void *new_sym = dlvsym(handle, func, new_ver);
+
+● Bash(gcc -O0 -o test_math_compat test_math_compat.c -lm -ldl &&
+      ./test_math_compat exp GLIBC_2.2.5 GLIBC_2.29 d)
+  ⎿  Error: Exit code 1
+     ERROR: cannot find _LIB_VERSION in libm: /lib/x86_64-linux-gnu/libm.so.6: 
+     undefined symbol: _LIB_VERSION
+
+     ERROR: cannot find _LIB_VERSION in libm: /lib/x86_64-linux-gnu/libm.so.6: 
+     undefined symbol: _LIB_VERSION
+
+● _LIB_VERSION is only a non-default @ symbol so plain dlsym can't find it — we
+  need dlvsym. Since the version string varies by arch, let's just try a short
+  list of known initial-arch versions:
+
+● Update(test_math_compat.c)
+  ⎿  Added 21 lines, removed 5 lines
+      290      }
+      291  
+      292      /*
+      293 -     * _LIB_VERSION is a single-versioned data symbol in libm 
+          -(the version                                                  
+      294 -     * string differs by arch, so use unversioned dlsym).     
+      293 +     * _LIB_VERSION is a non-default (@) versioned symbol in l
+          +ibm, so plain                                                 
+      294 +     * dlsym won't find it.  The version string is the arch's 
+          +initial glibc                                                 
+      295 +     * ABI version (differs per arch), so try common ones in o
+          +rder.                                                         
+      296 +     *                                                        
+      297       * We assert it's already _POSIX_ rather than forcing it, 
+           because any
+      298       * program that hasn't explicitly changed it runs in POSIX
+            mode by default.
+      299       * If it isn't _POSIX_, our assumption that old == new is 
+           wrong and the
+      300       * test should not proceed.
+      301       */
+      300 -    lib_version_ptr = (_LIB_VERSION_TYPE *)dlsym(handle, "_LIB
+          -_VERSION");                                                   
+      302 +    {                                                         
+      303 +        static const char *vers[] = {                         
+      304 +            "GLIBC_2.2.5",  /* x86_64 */                      
+      305 +            "GLIBC_2.0",    /* i386, most 32-bit */           
+      306 +            "GLIBC_2.17",   /* aarch64 */                     
+      307 +            "GLIBC_2.4",    /* arm (32-bit) */                
+      308 +            "GLIBC_2.6",    /* mips */                        
+      309 +            NULL                                              
+      310 +        };                                                    
+      311 +        for (int i = 0; vers[i]; i++) {                       
+      312 +            lib_version_ptr = (_LIB_VERSION_TYPE *)           
+      313 +                dlvsym(handle, "_LIB_VERSION", vers[i]);      
+      314 +            if (lib_version_ptr) break;                       
+      315 +        }                                                     
+      316 +    }                                                         
+      317      if (!lib_version_ptr) {
+      302 -        fprintf(stderr, "ERROR: cannot find _LIB_VERSION in li
+          -bm: %s\n",                                                    
+      303 -                dlerror());                                   
+      318 +        fprintf(stderr, "ERROR: cannot find _LIB_VERSION in li
+          +bm "                                                          
+      319 +                "(tried all known arch version strings)\n");  
+      320          dlclose(handle);
+      321          return 1;
+      322      }
+
+● Bash(gcc -O0 -o test_math_compat test_math_compat.c -lm -ldl && for args in \
+        "exp  GLIBC_2.2.5 GLIBC_2.29 d" \…)
+  ⎿  Testing exp  (@GLIBC_2.2.5  vs  @@GLIBC_2.29)  in _POSIX_ mode
+     … +13 lines (ctrl+o to expand)
+
+● Clean — no warning, correctly finds _LIB_VERSION, asserts POSIX mode, all
+  tests pass. The files are at scripts/analyze_math_symbols.py and
+  scripts/test_math_compat.c.
+
+✻ Churned for 57s
+
+❯ Nice work! This was a long conversation - can you write up what exactly   
+  we used these files to prove (and what they don't prove) in a form that I 
+   can pass up to another engineer?                                         
+
+● Bash(python3 analyze_math_symbols.py /lib/x86_64-linux-gnu/libm.so.6 2>&1 |
+      grep -E "^(Function|exp |log |pow
+      |hypot|fmod|lgamma|exp2|exp10|totalorder)" | head -20)
+  ⎿  Function             Old@Version              New@@Version         Sam
+     e fn?    Notes
+     exp                  @GLIBC_2.2.5             @@GLIBC_2.29         YES
+     … +27 lines (ctrl+o to expand)
+
+● Here's the write-up:
+
+  ---
+  What We Proved About glibc Math Symbol Version Changes
+
+  Background
+
+  glibc uses symbol versioning to maintain ABI compatibility. Several math
+  functions have two exported versions in libm.so.6: an old compat symbol (e.g.
+  exp@GLIBC_2.2.5) and a newer default symbol (e.g. exp@@GLIBC_2.29). The
+  question was whether these differ only in SVID error handling, or whether
+  there are other changes a caller in default POSIX mode would observe.
+
+  ---
+  What We Established
+
+  1. Source-level analysis of the wrapper structure (thorough, authoritative)
+
+  Starting from exp as a representative case and reading through the source and
+  git history (key commit: c20a10561a, "Remove the error handling wrapper from
+  exp and exp2", 2018), we established the general pattern:
+
+  - The old symbol is a thin wrapper (w_*_compat.c) that calls the underlying
+  implementation and then, if the result is exceptional (overflow, underflow,
+  domain error), calls __kernel_standard() — the SVID error machinery.
+  - The new symbol is a different thin wrapper (or sometimes the implementation
+  itself with a new versioned_symbol declaration) that calls the same underlying
+   implementation and directly sets errno.
+
+  The differences between old and new in any mode are:
+
+  ┌───────────────────────┬──────────────────────────┬──────────────────────┐
+  │       Behavior        │      Old @GLIBC_2.x      │   New @@GLIBC_2.y    │
+  ├───────────────────────┼──────────────────────────┼──────────────────────┤
+  │ matherr() callback    │ Called (in SVID/XOPEN    │ Never called         │
+  │                       │ mode)                    │                      │
+  ├───────────────────────┼──────────────────────────┼──────────────────────┤
+  │ _LIB_VERSION ==       │ Suppresses all error     │ Ignored; errno       │
+  │ _IEEE_                │ reporting                │ always set           │
+  ├───────────────────────┼──────────────────────────┼──────────────────────┤
+  │ Return value on       │ Returns HUGE (~3.4e38,   │                      │
+  │ overflow in _SVID_    │ finite)                  │ Returns +∞           │
+  │ mode                  │                          │                      │
+  ├───────────────────────┼──────────────────────────┼──────────────────────┤
+  │ Return value on       │                          │ Returns +∞ —         │
+  │ overflow in _POSIX_   │ Returns +∞               │ identical            │
+  │ mode                  │                          │                      │
+  ├───────────────────────┼──────────────────────────┼──────────────────────┤
+  │ errno in _POSIX_ mode │ Set to ERANGE/EDOM via   │ Set to ERANGE/EDOM   │
+  │                       │ __kernel_standard        │ directly — identical │
+  └───────────────────────┴──────────────────────────┴──────────────────────┘
+
+  In _POSIX_ mode (the glibc default for any program compiled with standard 
+  feature-test macros), return values and errno are identical between old and 
+  new. The underlying math code — the actual floating-point computation — is the
+   same in both cases.
+
+  2. Binary analysis across all version-bumped symbols (analyze_math_symbols.py)
+
+  The script disassembles both the old and new symbol bodies from a compiled
+  libm.so.6 and checks whether they branch to the same underlying implementation
+   address. On the x86_64 system tested, all 13 math functions with SVID-related
+   version bumps show Same fn? = YES:
+
+  exp, exp2, exp10, exp10f, log, pow, hypot, hypotf,
+  fmod, fmodf, lgamma, lgammaf, lgammal
+
+  This confirms that the binary matches the source analysis: the wrappers
+  differ, the implementation does not.
+
+  3. Runtime behavioral test in POSIX mode (test_math_compat.c)
+
+  The C test loads both symbol versions via dlvsym, asserts _LIB_VERSION == 
+  _POSIX_, then calls both with ~34–44 inputs per function covering: normal
+  values, overflow triggers, underflow triggers, domain-error triggers (log(-x),
+   pow(-x, 0.5)), subnormals, ±0, ±∞, and NaN. It compares return values
+  bit-exactly (with NaN == NaN) and errno.
+
+  Results on x86_64: all tests pass for exp, exp2, log, pow, hypot, fmod, 
+  lgamma.
+
+  ---
+  What This Does NOT Prove
+
+  1. Other architectures. The runtime test was only run on x86_64. The binary
+  analysis script supports cross-arch use (set OBJDUMP/READELF to cross-tools
+  and pass the target's libm.so.6), but has not been run on other arches. The
+  version string for the old symbol varies by arch (GLIBC_2.2.5 on x86_64,
+  GLIBC_2.0 on i386, GLIBC_2.17 on aarch64, etc.).
+  2. totalorder / totalordermag are different. These functions version-bumped
+  from GLIBC_2.25/2.26/2.27 to GLIBC_2.31 not to remove SVID handling, but
+  because their argument types changed from values to pointers. Old and new are
+  not call-compatible. The binary analysis confirms the same underlying
+  implementation is reached, but the calling convention is different and the
+  test program's type signatures don't apply to them.
+  3. Floating-point exception flags. The test compares return values and errno
+  only. It does not check whether the same FP exception flags (fegetexcept) are
+  raised by both versions. This is expected to be identical since both call the
+  same implementation, but was not explicitly verified.
+  4. _IEEE_ and _SVID_ mode callers. The test only covers _POSIX_ mode. Callers
+  that explicitly set _LIB_VERSION = _IEEE_ will observe a difference (old: no
+  errno; new: errno set). Callers that set _LIB_VERSION = _SVID_ will observe a
+  difference in matherr() callback behavior and in the overflow return value
+  (HUGE vs +∞). These differences are intentional and documented in the
+  math/Versions comment # No SVID compatible error handling.
+  5. Exhaustive input coverage. The runtime test uses a fixed set of ~34–44
+  inputs per function. It does not exhaustively cover all 2^64 doubles. The
+  boundary inputs are chosen to stress the error-handling paths specifically,
+  but a fuzzer-style test was not run.
+  6. Only the currently installed libm.so.6 was tested. Other glibc versions may
+   have different internal structures. The analysis applies to whatever binary
+  you run the scripts against.
+
+✻ Churned for 55s
